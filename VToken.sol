@@ -2,12 +2,15 @@
 // OpenZeppelin Contracts (last updated v4.7.0) (token/ERC20/ERC20.sol)
 
 pragma solidity ^0.8.0;
-
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+/**
+This is a standard template for an erc20 token
+More important is the mint method
+ */
 contract VTOKEN is Context, IERC20, IERC20Metadata,Ownable {
     mapping(address => uint256) private _balances;
 

@@ -3,20 +3,27 @@ pragma solidity ^0.8.4;
 import "./SwapPool.sol";
 import "./FractionNFT.sol";
 
-contract UniswapV3Router {
+/**
+ this contract is create  pool  and  swap  addpool
+ */
+
+contract MadiSwapV3Router {
     //nft-> tokenA->tokenB pools address
     mapping(address => mapping(address=> mapping(address=>address))) private  getPool721;
     //nft-> tokenA->tokenB id pools
     mapping(address => mapping(address=> mapping(address=> mapping(uint256=>address)))) private   getPool1155;
-
+    
     address private fractionNFTAddress;
-
+    // storage   pool detail 
     PoolInfo[]  private poolInfoArray;
+
+    // nft -> token b address => pools detial
     mapping(address => mapping(address=>PoolInfo)) private  poolMap721;
+        // nft -> token b address=>1155 id  => pools detial
     mapping(address => mapping(address=> mapping(uint=>PoolInfo))) private  poolMap1155;
-
+       // client addreess  ->  pools  all detial
     mapping(address =>PoolInfo[]) private myAddPoolArr;
-
+       // client addreess  ->  pools  all detial
     mapping(address => mapping(address=> uint)) private myAddPoolMap;
 
 
@@ -33,7 +40,6 @@ contract UniswapV3Router {
         fractionNFTAddress= address(new  FractionNFT());
         createPool(nftAddress, 0, tokenB, 80 ether);
     }
-
 
     function  getPoolInfo(address nft_address,address tokenB,uint  id)public  view  returns (PoolInfo memory){
         if(id>0){
