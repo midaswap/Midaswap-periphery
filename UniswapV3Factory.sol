@@ -95,6 +95,7 @@ contract MadiSwapV3Router {
         SwapPool(pools).swap(msg.sender,toAddress,_amount);
     }
 
+
     function createPool(address nft_address,uint  id ,address tokenB ,uint scale) public {
         if(id > 0){
             address  vtokenAddress = FractionNFT(fractionNFTAddress).create(nft_address,id);

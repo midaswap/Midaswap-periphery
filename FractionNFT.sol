@@ -19,6 +19,7 @@ interface Erc1155 {
     function safeTransferFrom ( address from, address to, uint256 id,  uint256 amount,  bytes memory data) external;
 }
 
+
 contract FractionNFT  {
     /**
     nftaddress  => vtoken addrees 
