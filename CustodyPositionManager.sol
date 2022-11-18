@@ -8,10 +8,13 @@ import 'https://github.com/Uniswap/v3-core/contracts/libraries/TickMath.sol';
 import './libraries/TransferHelper.sol';
 import './interfaces/INonfungiblePositionManager.sol';
 
+
 contract CustodyPositionManager is ERC721, IERC721Receiver {
 
-    int24 private constant MIN_TICK = -887272;
-    int24 private constant MAX_TICK = -MIN_TICK;
+    int24 private constant MIN_TICK = -24850;
+    int24 private constant MAX_TICK = -20800;
+
+    event mintNewPositionEvent(  uint256 tokenId, uint128 liquidity, uint256 amount0,   uint256 amount1);
     
     /// @dev Set the NonfungiblePositionManager address 
     INonfungiblePositionManager public nonfungiblePositionManager = INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
@@ -44,71 +47,46 @@ contract CustodyPositionManager is ERC721, IERC721Receiver {
         return IERC721Receiver.onERC721Received.selector;
     }
 
-    /// @notice Calls the mint function defined in periphery, mints the same amount of each token.
-    /// @return tokenId The id of the newly minted ERC721
-    /// @return liquidity The amount of liquidity for the position
-    /// @return amount0 The amount of token0
-    /// @return amount1 The amount of token1
-    function mintNewPosition(
-        address token0, 
-        address token1, 
-        uint256 amount0ToMint, 
-        uint256 amount1ToMint, 
-        uint24 poolFee
-    )
-        external
-        returns (
+
+
+
+
+
+    function mintNewPosition(INonfungiblePositionManager.MintParams  memory params )   external  returns (
             uint256 tokenId,
             uint128 liquidity,
             uint256 amount0,
             uint256 amount1
-        )
-    {
+        ){
         // transfer tokens to contract
-        TransferHelper.safeTransferFrom(token0, msg.sender, address(this), amount0ToMint);
-        TransferHelper.safeTransferFrom(token1, msg.sender, address(this), amount1ToMint);
-
+        TransferHelper.safeTransferFrom(params.token0, msg.sender, address(this), params.amount0Desired);
+        TransferHelper.safeTransferFrom(params.token1, msg.sender, address(this), params.amount1Desired);
         // Approve the position manager
-        TransferHelper.safeApprove(token0, address(nonfungiblePositionManager), amount0ToMint);
-        TransferHelper.safeApprove(token1, address(nonfungiblePositionManager), amount1ToMint);
-
+        TransferHelper.safeApprove(params.token0, address(nonfungiblePositionManager), params.amount0Desired);
+        TransferHelper.safeApprove(params.token1, address(nonfungiblePositionManager), params.amount1Desired);
         // The values for tickLower and tickUpper may not work for all tick spacings.
         // Setting amount0Min and amount1Min to 0 is unsafe.
-        INonfungiblePositionManager.MintParams memory params =
-            INonfungiblePositionManager.MintParams({
-                token0: token0,
-                token1: token1,
-                fee: poolFee,
-                tickLower: TickMath.MIN_TICK,
-                tickUpper: TickMath.MAX_TICK,
-                amount0Desired: amount0ToMint,
-                amount1Desired: amount1ToMint,
-                amount0Min: 0,
-                amount1Min: 0,
-                recipient: address(this),
-                deadline: block.timestamp
-            });
-
-        (tokenId, liquidity, amount0, amount1) = nonfungiblePositionManager.mint(params);
-
+        (tokenId, liquidity, amount0, amount1) =nonfungiblePositionManager.mint(params);
         // Create a deposit record
-        deposits[tokenId] = Deposit({owner: msg.sender, liquidity: liquidity, token0: token0, token1: token1});
+        deposits[tokenId] = Deposit({owner: msg.sender, liquidity: liquidity, token0: params.token0, token1: params.token1});
         // Mint a custody token
         _mint(msg.sender, tokenId);
-
         // Remove allowance and refund in both assets.
-        if (amount0 < amount0ToMint) {
-            TransferHelper.safeApprove(token0, address(nonfungiblePositionManager), 0);
-            uint256 refund0 = amount0ToMint - amount0;
-            TransferHelper.safeTransfer(token1, msg.sender, refund0);
+        emit mintNewPositionEvent(tokenId,liquidity,amount0,amount1);
+        if (amount0 < params.amount0Desired) {
+            TransferHelper.safeApprove(params.token0, address(nonfungiblePositionManager), 0);
+            uint256 refund0 = params.amount0Desired - amount0;
+            TransferHelper.safeTransfer(params.token0, msg.sender, refund0);
         }
 
-        if (amount1 < amount1ToMint) {
-            TransferHelper.safeApprove(token0, address(nonfungiblePositionManager), 0);
-            uint256 refund1 = amount1ToMint - amount1;
-            TransferHelper.safeTransfer(token1, msg.sender, refund1);
+        if (amount1 < params.amount1Desired) {
+            TransferHelper.safeApprove(params.token1, address(nonfungiblePositionManager), 0);
+            uint256 refund1 =  params.amount1Desired - amount1;
+            TransferHelper.safeTransfer(params.token1, msg.sender, refund1);
         }
     }
+
+
     /// @notice Increases liquidity in the current range
     /// @dev Pool must be initialized already to add liquidity
     /// @param tokenId The id of the erc721 token
