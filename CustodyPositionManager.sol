@@ -14,7 +14,8 @@ contract CustodyPositionManager is ERC721, IERC721Receiver {
     int24 private constant MIN_TICK = -24850;
     int24 private constant MAX_TICK = -20800;
 
-    event mintNewPositionEvent(  uint256 tokenId, uint128 liquidity, uint256 amount0,   uint256 amount1);
+    event PoolCreated(address pool);
+    event mintNewPositionEvent(  uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
     
     /// @dev Set the NonfungiblePositionManager address 
     INonfungiblePositionManager public nonfungiblePositionManager = INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
@@ -47,12 +48,22 @@ contract CustodyPositionManager is ERC721, IERC721Receiver {
         return IERC721Receiver.onERC721Received.selector;
     }
 
+    /// @dev Implementing create and initialize the Pool 
+    /// @param token0        The address of token0
+    /// @param token1        The address of token1
+    /// @param poolFee       The fee amount of the v3 pool for the specified token pair
+    /// @param sqrtPriceX96  The initial square root price of the pool as a Q64.96 value
+    function createAndInitializePoolIfNecessary(
+        address token0,
+        address token1,
+        uint24 poolFee,
+        uint160 sqrtPriceX96
+    ) external payable returns (address pool) {
+        pool = nonfungiblePositionManager.createAndInitializePoolIfNecessary(token0, token1, poolFee, sqrtPriceX96);
+        emit PoolCreated(pool);
+    }
 
-
-
-
-
-    function mintNewPosition(INonfungiblePositionManager.MintParams  memory params )   external  returns (
+    function mintNewPosition(INonfungiblePositionManager.MintParams memory params) external returns (
             uint256 tokenId,
             uint128 liquidity,
             uint256 amount0,
