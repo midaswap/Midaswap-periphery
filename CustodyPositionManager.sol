@@ -4,18 +4,19 @@ pragma abicoder v2;
 
 import 'https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1/contracts/token/ERC721/IERC721Receiver.sol';
 import 'https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1/contracts/token/ERC721/ERC721.sol';
+import 'https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1/contracts/access/Ownable.sol';
 import 'https://github.com/Uniswap/v3-core/contracts/libraries/TickMath.sol';
 import './libraries/TransferHelper.sol';
 import './interfaces/INonfungiblePositionManager.sol';
 
 
-contract CustodyPositionManager is ERC721, IERC721Receiver {
+contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
 
     int24 private constant MIN_TICK = -24850;
     int24 private constant MAX_TICK = -20800;
 
     event PoolCreated(address pool);
-    event mintNewPositionEvent(  uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
+    event NewPositionMinted(uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
     
     /// @dev Set the NonfungiblePositionManager address 
     INonfungiblePositionManager public nonfungiblePositionManager = INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
@@ -83,7 +84,7 @@ contract CustodyPositionManager is ERC721, IERC721Receiver {
         // Mint a custody token
         _mint(msg.sender, tokenId);
         // Remove allowance and refund in both assets.
-        emit mintNewPositionEvent(tokenId,liquidity,amount0,amount1);
+        emit NewPositionMinted(tokenId, liquidity, amount0, amount1);
         if (amount0 < params.amount0Desired) {
             TransferHelper.safeApprove(params.token0, address(nonfungiblePositionManager), 0);
             uint256 refund0 = params.amount0Desired - amount0;
@@ -227,6 +228,35 @@ contract CustodyPositionManager is ERC721, IERC721Receiver {
         //send liquidity back to owner
         _sendToOwner(tokenId, amount0, amount1);
 
+    }
+    
+    /// @dev            A function that withdraws the liquidity to LPs regarding the NFT which is traded outside of current tick price
+    /// @notice         Here will not transfer the assets back to LP, as they have gotten the assets directly.
+    ///                 Custody contract will keep this part of liquidity.
+    /// @param tokenId  The id of the erc721 token
+    /// @return amount0 The amount received back in token0
+    /// @return amount1 The amount returned back in token1
+    function decreaseSpecificLiquidity(uint256 tokenId, uint128 subLiquidity) 
+        onlyOwner 
+        external
+        returns (
+            uint256 amount0, 
+            uint256 amount1
+        ) 
+    {
+        require(subLiquidity < deposits[tokenId].liquidity, "Over withdrawal!");
+        // amount0Min and amount1Min are price slippage checks
+        // if the amount received after burning is not greater than these minimums, transaction will fail
+        INonfungiblePositionManager.DecreaseLiquidityParams memory params =
+            INonfungiblePositionManager.DecreaseLiquidityParams({
+                tokenId: tokenId,
+                liquidity: subLiquidity,
+                amount0Min: 0,
+                amount1Min: 0,
+                deadline: block.timestamp
+            });
+
+        (amount0, amount1) = nonfungiblePositionManager.decreaseLiquidity(params);
     }
 
     /// @notice Transfers funds to owner of NFT
