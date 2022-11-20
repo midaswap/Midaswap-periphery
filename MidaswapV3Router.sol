@@ -3,17 +3,39 @@ pragma solidity ^0.8.4;
 import "./SwapPool.sol";
 import "./FractionNFT.sol";
 
+
+interface ICustodyPositionManager{
+     struct MintParams {
+        address token0;
+        address token1;
+        uint24 fee;
+        int24 tickLower;
+        int24 tickUpper;
+        uint256 amount0Desired;
+        uint256 amount1Desired;
+        uint256 amount0Min;
+        uint256 amount1Min;
+        address recipient;
+        uint256 deadline;
+    }
+
+    function mintNewPosition(address sender,MintParams  memory params )   external;
+}
+
+
 /**
  this contract is create  pool  and  swap  addpool
  */
 
-contract MadiSwapV3Router {
+contract MidaswapV3Router {
     //nft-> tokenA->tokenB pools address
     mapping(address => mapping(address=> mapping(address=>address))) private  getPool721;
     //nft-> tokenA->tokenB id pools
     mapping(address => mapping(address=> mapping(address=> mapping(uint256=>address)))) private   getPool1155;
     
     address private fractionNFTAddress;
+
+    address private custodyPositionManagerAddress;
     // storage   pool detail 
     PoolInfo[]  private poolInfoArray;
 
@@ -36,9 +58,10 @@ contract MadiSwapV3Router {
         address fractionNFTAddress;
     }
 
-    constructor (address nftAddress, address tokenB)  {
+    constructor (address nftAddress, address tokenB,address managerAddress_)  {
         fractionNFTAddress= address(new  FractionNFT());
         createPool(nftAddress, 0, tokenB, 80 ether);
+        custodyPositionManagerAddress=managerAddress_;
     }
 
     function  getPoolInfo(address nft_address,address tokenB,uint  id)public  view  returns (PoolInfo memory){
@@ -95,7 +118,6 @@ contract MadiSwapV3Router {
         SwapPool(pools).swap(msg.sender,toAddress,_amount);
     }
 
-
     function createPool(address nft_address,uint  id ,address tokenB ,uint scale) public {
         if(id > 0){
             address  vtokenAddress = FractionNFT(fractionNFTAddress).create(nft_address,id);
@@ -123,11 +145,16 @@ contract MadiSwapV3Router {
 
 
 
-    function addPool721(address nft_address,address tokenB ,uint256 tokenId,uint _amountA,uint _amountB) public {
+    function addPool721(address nft_address,address tokenB ,uint256 tokenId,uint _amountA,uint _amountB,ICustodyPositionManager.MintParams memory params) public {
         address vtokenAddress = FractionNFT(fractionNFTAddress).exchange721(msg.sender,nft_address,tokenId);
         address pools=  getPool721[nft_address][vtokenAddress][tokenB];
         SwapPool(pools).stake(msg.sender,_amountA, _amountB);
         addMyAddPoolMap(msg.sender, pools, nft_address, tokenB);
+        ICustodyPositionManager(custodyPositionManagerAddress).mintNewPosition(msg.sender,params);
+    }
+
+    function addPoolPositionManager(ICustodyPositionManager.MintParams memory params)public{
+        ICustodyPositionManager(custodyPositionManagerAddress).mintNewPosition(msg.sender,params);
     }
 
 
