@@ -143,14 +143,11 @@ contract MidaswapV3Router {
         }
     }
 
-
-
-    function addPool721(address nft_address,address tokenB ,uint256 tokenId,uint _amountA,uint _amountB,ICustodyPositionManager.MintParams memory params) public {
+    function addPool721(address nft_address,address tokenB ,uint256 tokenId,uint _amountA,uint _amountB) public {
         address vtokenAddress = FractionNFT(fractionNFTAddress).exchange721(msg.sender,nft_address,tokenId);
         address pools=  getPool721[nft_address][vtokenAddress][tokenB];
         SwapPool(pools).stake(msg.sender,_amountA, _amountB);
         addMyAddPoolMap(msg.sender, pools, nft_address, tokenB);
-        ICustodyPositionManager(custodyPositionManagerAddress).mintNewPosition(msg.sender,params);
     }
 
     function addPoolPositionManager(ICustodyPositionManager.MintParams memory params)public{
