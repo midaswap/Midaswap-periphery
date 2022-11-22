@@ -33,20 +33,20 @@ contract FractionNFT  {
     /**
     get  vtoken address by nft 721 address 
      */
-    function getVtokenAddress721(address nftAddress)public view returns(address) {
+    function getVtokenAddress721(address nftAddress) public view returns(address) {
         return nftVTokenMap721[nftAddress];
     }
     /**
         get vtoken address by  nft 1155 address and  nft  id 
      */
-    function getVtokenAddress1155(address nftAddress,uint256 id)public view returns(address) {
+    function getVtokenAddress1155(address nftAddress, uint256 id) public view returns(address) {
         return nftVTokenMap1155[nftAddress][id];
     }
     /**
     
       create vtoken , if id gt 0  create 1155 vtoken or eq 0  create 721 voken
      */
-    function create(address nftAddress,uint  id ) public returns(address) {
+    function create(address nftAddress, uint id) public returns(address) {
         if(id >0 ){
             require(nftVTokenMap1155[nftAddress][id] == address(0));
             nftVTokenMap1155[nftAddress][id]= address(new  VTOKEN("VTOKEN","VTOKEN"));
