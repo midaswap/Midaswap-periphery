@@ -78,7 +78,7 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
         TransferHelper.safeApprove(params.token1, address(nonfungiblePositionManager), params.amount1Desired);
         // The values for tickLower and tickUpper may not work for all tick spacings.
         // Setting amount0Min and amount1Min to 0 is unsafe.
-        (tokenId, liquidity, amount0, amount1) =nonfungiblePositionManager.mint(params);
+        (tokenId, liquidity, amount0, amount1) = nonfungiblePositionManager.mint(params);
         // Create a deposit record
         deposits[tokenId] = Deposit({owner: msg.sender, liquidity: liquidity, token0: params.token0, token1: params.token1});
         // Mint a custody token
