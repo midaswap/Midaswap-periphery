@@ -4,26 +4,49 @@ pragma abicoder v2;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-// import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
-// import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
+import './VToken.sol';
+
+/**
+erc721 interface operation
+ */
+interface ERC721 {
+    function approve(address to, uint256 tokenId) external;
+    function transferFrom(address from, address to, uint256 tokenId) external;
+}
+
+/**
+Erc1155 interface operation
+ */
+interface ERC1155 {
+    function setApprovalForAll(address operator, bool approved) external;
+    function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes calldata data) external;
+}
+
+interface IPostionManager {
+    function getCurrentTick(address poolAddress) external view returns (int24 tick);
+}
 
 contract MidasVault is IERC721Receiver {
-    // The address of MidaswapRouter
-    address public swapRouter;
+
 
     // @dev MIN_TICK & MAX_TICK refer to all the range, 
     //      which only used in deposited NFT assets from traders.
     int24 private constant MIN_TICK = -887272;
     int24 private constant MAX_TICK = -MIN_TICK;
     
-    constructor (address _swapRouter) public {
-        swapRouter = _swapRouter;
+    address private custodyPositionManager;
+        
+    constructor (address _custodyPositionManager) public {
+        custodyPositionManager = _custodyPositionManager;
     }
-
-    modifier onlyRouter() {
-        require(msg.sender == swapRouter, "No Permission to withdraw!");
-        _;
-    }
+    /**
+    nftaddress  => vtoken addrees 
+     */
+    mapping(address => address) nftVTokenMap721;
+    /**
+    nftaddress => id => vtoken address  
+     */
+    mapping(address => mapping(uint256 => address)) nftVTokenMap1155;
 
     // Implementing `onERC721Received` so address(this) contract can receive the NFTs
     // Note that the operator is recorded as the owner of the NFTs 
@@ -37,7 +60,106 @@ contract MidasVault is IERC721Receiver {
         return IERC721Receiver.onERC721Received.selector;
     }
 
-    /* ========== ERC721 ASSETS ========== */
+
+    /* ========== VIEW FUNCTIONS ========== */
+
+    /**
+    get  vtoken address by nft 721 address 
+     */
+    function getVtokenAddress721(address nftAddress) external view returns (address) {
+        return nftVTokenMap721[nftAddress];
+    }
+    /**
+        get vtoken address by  nft 1155 address and  nft  id 
+     */
+    function getVtokenAddress1155(address nftAddress, uint256 id) external view returns (address) {
+        return nftVTokenMap1155[nftAddress][id];
+    }
+    /**
+
+    /* ========== EXTERNAL FUNCTIONS ========== */
+    function create(address nftAddress, uint id) external returns (address) {
+        if(id > 0){
+            require(nftVTokenMap1155[nftAddress][id] == address(0));
+            nftVTokenMap1155[nftAddress][id]= address(new VTOKEN("VTOKEN","VTOKEN"));
+            return nftVTokenMap1155[nftAddress][id];
+        } else {
+            require(nftVTokenMap721[nftAddress] == address(0));
+            nftVTokenMap721[nftAddress]= address(new VTOKEN("VTOKEN","VTOKEN"));
+            return nftVTokenMap721[nftAddress];
+        }
+    }
+
+    function exchangeERC721FromLP(
+        address owner, 
+        address nftAddress, 
+        uint256[] calldata tokenId,
+        address poolAddress,
+        int24 tickLower,
+        int24 tickUpper
+        ) external payable returns (uint256 nftAmount) 
+        {
+            // Check if the deposit successful
+            require(_depositNFTsFromLP(nftAddress, tokenId, poolAddress, tickLower, tickUpper), "Deposit assets failed!");   
+            // Exchange the vToken to LP         
+            nftAmount = tokenId.length;
+            VTOKEN(nftVTokenMap721[nftAddress]).mint(owner, tokenId.length);
+        }
+
+    function exchangeERC721FromTrader(
+        address owner, 
+        address nftAddress, 
+        address poolAddress,
+        uint256[] calldata tokenId
+        ) external payable returns (uint256 nftAmount) 
+        {
+            // Check if the deposit successful
+            require(_depositNFTsFromTrader(nftAddress, tokenId, poolAddress), "Deposit assets failed!");
+            // Exchange the vToken to Trader
+            nftAmount = tokenId.length;
+            VTOKEN(nftVTokenMap721[nftAddress]).mint(owner, nftAmount);
+        }
+    
+    function withdrawERC721(
+        address nftAddress,
+        address poolAddress,
+        uint256[] calldata tokenId,
+        address receiver
+        ) external returns (uint256 nftAmount)
+        {
+            nftAmount = tokenId.length;
+            VTOKEN(nftVTokenMap721[nftAddress]).burn(receiver, nftAmount);
+            // Get current tick price
+            int24 currentTick = IPostionManager(custodyPositionManager).getCurrentTick(poolAddress);
+            // Check the tokenId valid to withdraw
+            _checkTickPrice(poolAddress, tokenId, currentTick);
+            // Check if the withdrawal successful
+            require(_withdrawNFTs(nftAddress, poolAddress, tokenId, receiver), "Withdraw assets failed!");
+        }
+    
+    function exchangeFromERC1155(
+        address nftAddress, 
+        uint256 id, 
+        uint256 amount
+        ) external payable returns (address) 
+        {
+            VTOKEN(nftVTokenMap1155[nftAddress][id]).mint(msg.sender, amount);
+            ERC1155(nftAddress).safeTransferFrom(msg.sender, address(this), id, amount, '0x');
+            return nftVTokenMap1155[nftAddress][id];
+        }
+
+    function exchangeToERC1155(
+        address nftAddress,
+        uint256 id,
+        uint256 amount
+        ) external returns (address) 
+        {
+            VTOKEN(nftVTokenMap1155[nftAddress][id]).burn(msg.sender, amount);
+            ERC1155(nftAddress).safeTransferFrom(address(this), msg.sender, id, amount, '0x');
+            return nftVTokenMap1155[nftAddress][id];                        
+        }
+
+    /* ========== INTERNAL FUNCTIONS ========== */
 
     struct DepositParams {
         address owner;
@@ -47,14 +169,25 @@ contract MidasVault is IERC721Receiver {
     
     /// @dev poolAddress => tokenID => DepositParams
     mapping(address => mapping(uint256 => DepositParams)) public deposits;
+
+    function _checkTickPrice(
+        address poolAddress,
+        uint256[] calldata tokenId,
+        int24 currentTick
+    ) internal returns (bool) {
+        for (uint i = 0; i < tokenId.length; i++) {
+            require(deposits[poolAddress][tokenId[i]].tickLower <= currentTick && deposits[poolAddress][tokenId[i]].tickUpper >= currentTick);
+        }
+        return true;
+    }
    
-    function depositSingleNFTFromLP(
+    function _depositSingleNFTFromLP(
         address nftAddress, 
         uint256 tokenId,        
         address poolAddress,
         int24 tickLower,
         int24 tickUpper
-    ) external payable returns (bool) 
+    ) internal returns (bool) 
     {
         // Deposit the NFT into Vault
         IERC721(nftAddress).safeTransferFrom(msg.sender, address(this), tokenId);
@@ -63,11 +196,11 @@ contract MidasVault is IERC721Receiver {
         return true;
     }
 
-    function depositSingleNFTFromTrader(
+    function _depositSingleNFTFromTrader(
         address nftAddress,
         address poolAddress,
         uint256 tokenId
-    ) external payable returns (bool) {
+    ) internal returns (bool) {
         // Deposit the NFT into Vault
         IERC721(nftAddress).safeTransferFrom(msg.sender, address(this), tokenId);
         // Create a deposit record
@@ -75,13 +208,13 @@ contract MidasVault is IERC721Receiver {
         return true;
     }
 
-    function depositNFTsFromLP(
+    function _depositNFTsFromLP(
         address nftAddress,
         uint256[] calldata tokenId,
         address poolAddress,
         int24 tickLower,
         int24 tickUpper
-    ) external payable returns (bool) 
+    ) internal returns (bool) 
     {
         for (uint i = 0; i < tokenId.length; i++) {
             // Deposit the NFT into Vault
@@ -92,11 +225,11 @@ contract MidasVault is IERC721Receiver {
         return true;
     }
 
-    function depositNFTsFromTrader(
+    function _depositNFTsFromTrader(
         address nftAddress,
         uint256[] calldata tokenId,
         address poolAddress
-    ) external payable returns (bool) 
+    ) internal returns (bool) 
     {
         for (uint i = 0; i < tokenId.length; i++) {
             // Deposit the NFT into Vault
@@ -107,12 +240,12 @@ contract MidasVault is IERC721Receiver {
         return true;
     }
 
-    function withdrawSingleNFT(
+    function _withdrawSingleNFT(
         address nftAddress,
         address poolAddress,
         uint256 tokenId,
         address receiver
-    ) onlyRouter external returns (bool) {
+    ) internal returns (bool) {
         // Withdraw NFT from Vault
         IERC721(nftAddress).safeTransferFrom(address(this), receiver, tokenId);
         // Delete the deposit record
@@ -120,12 +253,12 @@ contract MidasVault is IERC721Receiver {
         return true;
     }
 
-    function withdrawNFTs(
+    function _withdrawNFTs(
         address nftAddress,
         address poolAddress,
         uint256[] calldata tokenId,
         address receiver
-    ) onlyRouter external returns (bool) {
+    ) internal returns (bool) {
         for (uint i = 0; i < tokenId.length; i++) {
             // Withdraw the NFT from Vault
             IERC721(nftAddress).safeTransferFrom(address(this), receiver, tokenId[i]);
@@ -134,72 +267,4 @@ contract MidasVault is IERC721Receiver {
         }
         return true;
     }
-
-    /* ========== ERC1155 ASSETS ========== */
-    
-    // struct ERC1155AssetParams {
-    //     address nftAddress;
-    //     int id;
-    //     uint256 amount;
-    // }
-
-    // // @dev poolAddress => AssetParams
-    // mapping(address => ERC1155AssetParams) public assetInfo;
-    
-    // function depositERC1155(
-    //     address nftAddress, 
-    //     address poolAddress,
-    //     uint256 id,
-    //     uint256 amount
-    // ) external payable returns (bool) {
-    //     // Deposit ERC1155 into Vault
-    //     IERC1155(nftAddress).safeTransferFrom(msg.sender, address(this), id, amount);
-    //     // Update assets info
-    //     uint256 amountUpdated = assetInfo[poolAddress].amount + amount;
-    //     assetInfo[poolAddress] = ERC1155AssetParams({nftAddress: nftAddress, id: id, amount: amountUpdated});
-        
-    //     return true;
-    // }
-
-    // function depositBatchERC1155(
-    //     address nftAddress,
-    //     address[] calldata poolAddress,
-    //     uint256[] calldata ids,
-    //     uint256[] calldata amounts
-    // ) external payable returns (bool) {
-    //     // Check lengths match
-    //     require(poolAddress.length == ids.length, "depositBatchERC1155: args length diff");
-    //     require(ids.length == amounts.length, "depositBatchERC1155: args length diff");
-        
-    //     // Deposit ERC1155 into Vault
-    //     IERC1155(nftAddress).safeBatchTransferFrom(msg.sender, address(this), ids, amounts);
-        
-    //     // Update assets info
-    //     for (uint i = 0; i < ids.length; i++) {
-    //         uint256 amountUpdated = assetInfo[poolAddress[i]].amount + amounts[i];
-    //         assetInfo[poolAddress[i]] = ERC1155AssetParams({nftAddress: nftAddress, id: ids[i], amount: amountUpdated});            
-    //     }
-       
-    //     return true;
-    // }
-
-    // function withdrawERC1155(
-    //     address nftAddress,
-    //     address poolAddress,
-    //     uint256 id,
-    //     uint256 amount,
-    //     address receiver
-    // ) onlyRouter external returns (bool) {
-    //     // Check balance 
-    //     require(assetInfo[poolAddress].amount > amount, 'Over withdraw!');
-       
-    //     // Withdraw NFT from Vault
-    //     IERC1155(nftAddress).safeTransferFrom(address(this), receiver, id, amount);
-        
-    //     // Update assets info
-    //     uint256 amountUpdated = assetInfo[poolAddress].amount - amount;
-    //     assetInfo[poolAddress] = ERC1155AssetParams({nftAddress: nftAddress, id: id, amount: amountUpdated});
-        
-    //     return true;
-    // }
 }

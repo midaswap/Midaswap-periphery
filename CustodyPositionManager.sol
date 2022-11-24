@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity =0.7.6;
+pragma solidity >=0.7.6;
 pragma abicoder v2;
 
 import 'https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1/contracts/token/ERC721/IERC721Receiver.sol';
 import 'https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1/contracts/token/ERC721/ERC721.sol';
 import 'https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1/contracts/access/Ownable.sol';
 import 'https://github.com/Uniswap/v3-core/contracts/libraries/TickMath.sol';
+import 'https://github.com/Uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol';
 import './libraries/TransferHelper.sol';
 import './interfaces/INonfungiblePositionManager.sol';
-
 
 contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
 
@@ -27,10 +27,17 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
         uint128 liquidity;
         address token0;
         address token1;
+        int24 tickLower;
+        int24 tickUpper;
     }
 
     /// @dev deposits[tokenId] => Deposit
     mapping(uint256 => Deposit) public deposits;
+
+    /// @dev pools[token0Address] => (token1Address => poolAddress)
+    mapping(address => mapping(address => address)) public pools;
+    /// @dev positionPools[tokenId] => poolAddress
+    mapping(uint256 => address) public positionPools;
 
     constructor() ERC721("MidasCustodyLPToken", "MCLPT") {}
 
@@ -49,6 +56,20 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
         return IERC721Receiver.onERC721Received.selector;
     }
 
+    function getCurrentTick(address poolAddress) external view returns (int24 tick){
+        ( , tick, , , , , ) = IUniswapV3Pool(poolAddress).slot0();
+    }
+
+    function getPositionInfo(uint256 tokenId) external view returns (int24 tickLower, int24 tickUpper) {
+        tickLower = deposits[tokenId].tickLower;
+        tickUpper = deposits[tokenId].tickUpper;
+    }
+
+    function getPoolInfo(uint256 tokenId) external view returns (address pool) {
+        pool = positionPools[tokenId];
+    }
+
+
     /// @dev Implementing create and initialize the Pool 
     /// @param token0        The address of token0
     /// @param token1        The address of token1
@@ -61,10 +82,11 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
         uint160 sqrtPriceX96
     ) external payable returns (address pool) {
         pool = nonfungiblePositionManager.createAndInitializePoolIfNecessary(token0, token1, poolFee, sqrtPriceX96);
+        pools[token0][token1] = pool; 
         emit PoolCreated(pool);
     }
 
-    function mintNewPosition(INonfungiblePositionManager.MintParams memory params) external returns (
+    function mintNewPosition(address provider, INonfungiblePositionManager.MintParams memory params) external returns (
             uint256 tokenId,
             uint128 liquidity,
             uint256 amount0,
@@ -80,11 +102,11 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
         // Setting amount0Min and amount1Min to 0 is unsafe.
         (tokenId, liquidity, amount0, amount1) = nonfungiblePositionManager.mint(params);
         // Create a deposit record
-        deposits[tokenId] = Deposit({owner: msg.sender, liquidity: liquidity, token0: params.token0, token1: params.token1});
+        deposits[tokenId] = Deposit({owner: provider, liquidity: liquidity, token0: params.token0, token1: params.token1, tickLower: params.tickLower, tickUpper: params.tickUpper});
+        positionPools[tokenId] = pools[params.token0][params.token1];
         // Mint a custody token
-        _mint(msg.sender, tokenId);
+        _mint(provider, tokenId);
         // Remove allowance and refund in both assets.
-        emit NewPositionMinted(tokenId, liquidity, amount0, amount1);
         if (amount0 < params.amount0Desired) {
             TransferHelper.safeApprove(params.token0, address(nonfungiblePositionManager), 0);
             uint256 refund0 = params.amount0Desired - amount0;
@@ -96,6 +118,8 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
             uint256 refund1 =  params.amount1Desired - amount1;
             TransferHelper.safeTransfer(params.token1, msg.sender, refund1);
         }
+
+        emit NewPositionMinted(tokenId, liquidity, amount0, amount1);
     }
 
 
@@ -196,13 +220,13 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
         _sendToOwner(tokenId, amount0, amount1);
     }
 
-    /// @notice A function that decreases all the current liquidity.
-    /// @param tokenId The id of the erc721 token
-    /// @return amount0 The amount received back in token0
-    /// @return amount1 The amount returned back in token1
-    function decreaseAllLiquidity(uint256 tokenId) 
+    function decreaseLiquidity(
+        uint256 tokenId, 
+        uint128 subLiquidity
+    ) 
         external 
         returns (
+            uint128 remainLiquidity,
             uint256 amount0, 
             uint256 amount1
         ) 
@@ -211,23 +235,23 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
         require(msg.sender == deposits[tokenId].owner, 'Not the owner');
         // get liquidity data for tokenId
         uint128 liquidity = deposits[tokenId].liquidity;
+        require(subLiquidity <= liquidity, "Cannot decrease liquidity more than you have!");
 
         // amount0Min and amount1Min are price slippage checks
         // if the amount received after burning is not greater than these minimums, transaction will fail
         INonfungiblePositionManager.DecreaseLiquidityParams memory params =
             INonfungiblePositionManager.DecreaseLiquidityParams({
                 tokenId: tokenId,
-                liquidity: liquidity,
+                liquidity: subLiquidity,
                 amount0Min: 0,
                 amount1Min: 0,
                 deadline: block.timestamp
             });
-
+        remainLiquidity = liquidity - subLiquidity;
         (amount0, amount1) = nonfungiblePositionManager.decreaseLiquidity(params);
 
         //send liquidity back to owner
         _sendToOwner(tokenId, amount0, amount1);
-
     }
     
     /// @dev            A function that withdraws the liquidity to LPs regarding the NFT which is traded outside of current tick price
@@ -289,7 +313,7 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
         nonfungiblePositionManager.safeTransferFrom(address(this), msg.sender, tokenId);
     }
 
-    function burn(uint256 tokenId) external {
+    function burn(uint256 tokenId) external returns (bool) {
         // must be the owner of the NFT        
         require(msg.sender == deposits[tokenId].owner, 'Not the owner');
         // burn the custody token
@@ -298,5 +322,6 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
         delete deposits[tokenId];
         // burn the Uni-LPtoken
         nonfungiblePositionManager.burn(tokenId);
+        return true;
     }
 }
