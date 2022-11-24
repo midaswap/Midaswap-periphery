@@ -11,7 +11,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 This is a standard template for an erc20 token
 More important is the mint method
  */
-contract VTOKEN is Context, IERC20, IERC20Metadata,Ownable {
+contract VTOKEN is Context, IERC20, IERC20Metadata, Ownable {
     mapping(address => uint256) private _balances;
 
 
@@ -34,17 +34,19 @@ contract VTOKEN is Context, IERC20, IERC20Metadata,Ownable {
     constructor(string memory name_, string memory symbol_) {
         _name = name_;
         _symbol = symbol_;
-        _isCreate=true;
+        _isCreate = true;
     }
 
     
 
 
-    function mint(address account, uint256 amount) public  onlyOwner {
+    function mint(address account, uint256 amount) public onlyOwner {
         _mint(account, amount);
     }
 
-
+    function burn(address account, uint256 amount) public onlyOwner {
+        _burn(account, amount);
+    }
 
     /**
      * @dev Returns the name of the token.
