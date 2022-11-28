@@ -212,7 +212,7 @@ contract MidaswapRouter {
             (remainLiquidity, amount0, amount1) = ICustodyPositionManager(custodyPositionManager).decreaseLiquidity(lpTokenId, subLiquidity);
             require(tokenId.length < amount0, 'Over the assets you own!');
             address poolAddress = ICustodyPositionManager(custodyPositionManager).getPoolInfo(lpTokenId);
-            midasVault.withdrawERC721(nftAddress, poolAddress, tokenId, msg.sender);
+            midasVault.withdrawERC721FromLP(nftAddress, poolAddress, tokenId, msg.sender);
         }
     }
 
