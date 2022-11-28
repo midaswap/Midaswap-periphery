@@ -156,22 +156,24 @@ contract MidasVault is IERC721Receiver {
     function exchangeFromERC1155(
         address nftAddress, 
         uint256 id, 
-        uint256 amount
+        uint256 amount,
+        address receiver
         ) external payable returns (address) 
         {
-            VTOKEN(nftVTokenMap1155[nftAddress][id]).mint(msg.sender, amount);
-            ERC1155(nftAddress).safeTransferFrom(msg.sender, address(this), id, amount, '0x');
+            VTOKEN(nftVTokenMap1155[nftAddress][id]).mint(receiver, amount);
+            ERC1155(nftAddress).safeTransferFrom(receiver, address(this), id, amount, '0x');
             return nftVTokenMap1155[nftAddress][id];
         }
 
     function exchangeToERC1155(
         address nftAddress,
         uint256 id,
-        uint256 amount
+        uint256 amount,
+        address receiver
         ) external returns (address) 
         {
-            VTOKEN(nftVTokenMap1155[nftAddress][id]).burn(msg.sender, amount);
-            ERC1155(nftAddress).safeTransferFrom(address(this), msg.sender, id, amount, '0x');
+            VTOKEN(nftVTokenMap1155[nftAddress][id]).burn(receiver, amount);
+            ERC1155(nftAddress).safeTransferFrom(address(this), receiver, id, amount, '0x');
             return nftVTokenMap1155[nftAddress][id];                        
         }
 
@@ -203,7 +205,7 @@ contract MidasVault is IERC721Receiver {
         address receiver
     ) internal returns (bool) {
         for (uint i = 0; i < tokenId.length; i++) {
-            require(msg.sender = deposits[poolAddress][tokenId[i]].owner);
+            require(msg.sender == deposits[poolAddress][tokenId[i]].owner);
         }
         return true;        
     }

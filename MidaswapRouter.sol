@@ -3,6 +3,8 @@ pragma solidity >=0.7.6;
 pragma abicoder v2;
 
 import './MidasVault.sol';
+import './libraries/TransferHelper.sol';
+import './interfaces/ISwapRouter.sol';
 
 interface ICustodyPositionManager {
     struct MintParams {
@@ -22,6 +24,8 @@ interface ICustodyPositionManager {
     function getPositionInfo(uint256 tokenId) external view returns (int24 tickLower, int24 tickUpper);
 
     function getPoolInfo(uint256 tokenId) external view returns (address pool);
+
+    function getPoolAddress(address token0, address token1) external view returns (address pool);
 
     function createAndInitializePoolIfNecessary(
         address token0,
@@ -76,21 +80,145 @@ interface ICustodyPositionManager {
 
 contract MidaswapRouter {
     
+    ISwapRouter public immutable swapRouter;
     address private custodyPositionManager;
     MidasVault public midasVault;
         
-    constructor (address _custodyPositionManager, address _midasVault) public {
+    constructor (address _custodyPositionManager, address _midasVault, ISwapRouter _swapRouter) {
         custodyPositionManager = _custodyPositionManager;
         midasVault = MidasVault(_midasVault);
+        swapRouter = _swapRouter;
     }
 
-    /* ========== SWAPS OPERATIONS ========== */
+    /* ========== TRADING OPERATIONS ========== */
 
-    // function swapFromERC721()
-    // function swapFromERC1155()
-    // function swapFromFractions()
-    // function swapToERC721()
-    // function swapToERC1155()
+    function buyERC721(
+        uint256[] calldata tokenId,
+        uint256 amountInMaximum,
+        address nftAddress,
+        address ftAddress,
+        uint24 poolFee
+    ) external returns (uint256 amountIn) {
+        address token0 = midasVault.getVtokenAddress721(nftAddress);
+        uint256 amountOut = tokenId.length;
+        amountIn = _swapExactOutputSingle(amountOut, amountInMaximum, ftAddress, token0, poolFee);
+        address poolAddress = ICustodyPositionManager(custodyPositionManager).getPoolAddress(token0, ftAddress); 
+        midasVault.withdrawERC721FromTrader(nftAddress, poolAddress, tokenId, msg.sender);
+    }
+
+    function buyERC1155(
+        address nftAddress,
+        uint256[] calldata amountInMaximum,
+        address[] calldata ftAddress,
+        uint256[] calldata id,
+        uint256[] calldata amountOut,
+        uint24[] calldata poolFee
+    ) external returns (uint256[] memory amountIn) {
+        require(id.length == amountInMaximum.length && ftAddress.length == amountOut.length, 'Inputs not match!');
+        require(id.length == ftAddress.length && amountInMaximum.length == poolFee.length, 'Inputs not match!');
+        for (uint i = 0; i < id.length; i++) {
+            address token1 =  midasVault.getVtokenAddress1155(nftAddress, id[i]);
+            amountIn[i] = _swapExactOutputSingle(amountOut[i], amountInMaximum[i], ftAddress[i], token1, poolFee[i]);
+            midasVault.exchangeToERC1155(nftAddress, id[i], amountOut[i], msg.sender);
+        }
+    }
+
+    function sellERC721(
+        uint256[] calldata tokenId,
+        address nftAddress,
+        address ftAddress,
+        uint24 poolFee
+    ) external returns (uint256 amountOut) {
+        uint256 amountIn = tokenId.length;
+        address poolAddress = ICustodyPositionManager(custodyPositionManager).getPoolAddress(midasVault.getVtokenAddress721(nftAddress), ftAddress);
+        midasVault.exchangeERC721FromTrader(msg.sender, nftAddress, poolAddress, tokenId);
+        amountOut = _swapExactInputSingle(amountIn, midasVault.getVtokenAddress721(nftAddress), ftAddress, poolFee);
+    }
+
+    function sellERC1155(
+        uint256[] calldata id,
+        address nftAddress,
+        address[] calldata ftAddress,
+        uint24[] calldata poolFee,
+        uint256[] calldata amountIn
+    ) external returns (uint256[] memory amountOut) {
+        require(id.length == ftAddress.length && amountIn.length == poolFee.length, 'Inputs not match!');
+        require(id.length == amountIn.length, 'Inputs not match!');        
+        for (uint i = 0; i < id.length; i++) {
+            midasVault.exchangeFromERC1155(nftAddress, id[i], amountIn[i], msg.sender);
+            amountOut[i] = _swapExactInputSingle(amountIn[i], midasVault.getVtokenAddress1155(nftAddress, id[i]), ftAddress[i], poolFee[i]);
+        }
+    }
+
+    function _swapExactOutputSingle(
+        uint256 amountOut, 
+        uint256 amountInMaximum,
+        address token0,
+        address token1,
+        uint24 poolFee
+        ) internal returns (uint256 amountIn) {
+        // Transfer the specified amount of token0 to this contract.
+        TransferHelper.safeTransferFrom(token0, msg.sender, address(this), amountInMaximum);
+
+        // Approve the router to spend the specified `amountInMaximum` of token0.
+        // In production, you should choose the maximum amount to spend based on oracles or other data sources to achieve a better swap.
+        TransferHelper.safeApprove(token0, address(swapRouter), amountInMaximum);
+
+        ISwapRouter.ExactOutputSingleParams memory params =
+            ISwapRouter.ExactOutputSingleParams({
+                tokenIn: token0,
+                tokenOut: token1,
+                fee: poolFee,
+                recipient: msg.sender,
+                deadline: block.timestamp,
+                amountOut: amountOut,
+                amountInMaximum: amountInMaximum,
+                sqrtPriceLimitX96: 0
+            });
+
+        // Executes the swap returning the amountIn needed to spend to receive the desired amountOut.
+        amountIn = swapRouter.exactOutputSingle(params);
+
+        // For exact output swaps, the amountInMaximum may not have all been spent.
+        // If the actual amount spent (amountIn) is less than the specified maximum amount, we must refund the msg.sender and approve the swapRouter to spend 0.
+        if (amountIn < amountInMaximum) {
+            TransferHelper.safeApprove(token0, address(swapRouter), 0);
+            TransferHelper.safeTransfer(token0, msg.sender, amountInMaximum - amountIn);
+        }
+    }    
+
+
+    function _swapExactInputSingle(
+        uint256 amountIn,
+        address token0,
+        address token1,
+        uint24 poolFee
+        ) internal returns (uint256 amountOut) {
+        // msg.sender must approve this contract
+
+        // Transfer the specified amount of token0 to this contract.
+        TransferHelper.safeTransferFrom(token0, msg.sender, address(this), amountIn);
+
+        // Approve the router to spend token0.
+        TransferHelper.safeApprove(token0, address(swapRouter), amountIn);
+
+        // Naively set amountOutMinimum to 0. In production, use an oracle or other data source to choose a safer value for amountOutMinimum.
+        // We also set the sqrtPriceLimitx96 to be 0 to ensure we swap our exact input amount.
+        ISwapRouter.ExactInputSingleParams memory params =
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: token0,
+                tokenOut: token1,
+                fee: poolFee,
+                recipient: msg.sender,
+                deadline: block.timestamp,
+                amountIn: amountIn,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            });
+
+        // The call to `exactInputSingle` executes the swap.
+        amountOut = swapRouter.exactInputSingle(params);
+    }
 
     /* ========== LIQUIDITY MANAGEMENT ========== */
     
@@ -130,7 +258,7 @@ contract MidaswapRouter {
             uint256 amount1) 
     {
         if(id > 0){
-            midasVault.exchangeFromERC1155(nftAddress, id, amount);
+            midasVault.exchangeFromERC1155(nftAddress, id, amount, msg.sender);
             params.token0 = midasVault.getVtokenAddress1155(nftAddress, id);
             params.token1 = ftAddress;
             (lpTokenId, liquidity, amount0, amount1) = ICustodyPositionManager(custodyPositionManager).mintNewPosition(msg.sender, params);  
@@ -172,7 +300,7 @@ contract MidaswapRouter {
         )
     {
         if(id > 0){
-            midasVault.exchangeFromERC1155(nftAddress, id, amountAdd0);
+            midasVault.exchangeFromERC1155(nftAddress, id, amountAdd0, msg.sender);
             (liquidity, amount0, amount1) = ICustodyPositionManager(custodyPositionManager).increaseLiquidityCurrentRange(lpTokenId, amountAdd0, amountAdd1);  
         } else {
             (int24 tickLower, int24 tickUpper) = ICustodyPositionManager(custodyPositionManager).getPositionInfo(lpTokenId);
