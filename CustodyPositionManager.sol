@@ -69,6 +69,10 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
         pool = positionPools[tokenId];
     }
 
+    function getPoolAddress(address token0, address token1) external view returns (address pool) {
+        pool = pools[token0][token1];
+    }
+
 
     /// @dev Implementing create and initialize the Pool 
     /// @param token0        The address of token0

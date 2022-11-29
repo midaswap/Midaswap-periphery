@@ -1,0 +1,383 @@
+{
+	"deploy": {
+		"VM:-": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		},
+		"main:1": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		},
+		"ropsten:3": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		},
+		"rinkeby:4": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		},
+		"kovan:42": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		},
+		"goerli:5": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		},
+		"Custom": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		}
+	},
+	"data": {
+		"bytecode": {
+			"functionDebugData": {},
+			"generatedSources": [],
+			"linkReferences": {},
+			"object": "",
+			"opcodes": "",
+			"sourceMap": ""
+		},
+		"deployedBytecode": {
+			"functionDebugData": {},
+			"generatedSources": [],
+			"immutableReferences": {},
+			"linkReferences": {},
+			"object": "",
+			"opcodes": "",
+			"sourceMap": ""
+		},
+		"gasEstimates": null,
+		"methodIdentifiers": {
+			"burn(uint256)": "42966c68",
+			"createAndInitializePoolIfNecessary(address,address,uint24,uint160)": "13ead562",
+			"decreaseLiquidity(uint256,uint128)": "99d7b594",
+			"decreaseLiquidityInRatio(uint256,uint128)": "abad9323",
+			"getPoolAddress(address,address)": "3fa1e0c8",
+			"getPoolInfo(uint256)": "2f380b35",
+			"getPositionInfo(uint256)": "519f5099",
+			"increaseLiquidityCurrentRange(uint256,uint256,uint256)": "617d6d6e",
+			"mintNewPosition(address,(address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,address,uint256))": "342c4239"
+		}
+	},
+	"abi": [
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "tokenId",
+					"type": "uint256"
+				}
+			],
+			"name": "burn",
+			"outputs": [
+				{
+					"internalType": "bool",
+					"name": "",
+					"type": "bool"
+				}
+			],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "token0",
+					"type": "address"
+				},
+				{
+					"internalType": "address",
+					"name": "token1",
+					"type": "address"
+				},
+				{
+					"internalType": "uint24",
+					"name": "poolFee",
+					"type": "uint24"
+				},
+				{
+					"internalType": "uint160",
+					"name": "sqrtPriceX96",
+					"type": "uint160"
+				}
+			],
+			"name": "createAndInitializePoolIfNecessary",
+			"outputs": [
+				{
+					"internalType": "address",
+					"name": "pool",
+					"type": "address"
+				}
+			],
+			"stateMutability": "payable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "tokenId",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint128",
+					"name": "subLiquidity",
+					"type": "uint128"
+				}
+			],
+			"name": "decreaseLiquidity",
+			"outputs": [
+				{
+					"internalType": "uint128",
+					"name": "remainLiquidity",
+					"type": "uint128"
+				},
+				{
+					"internalType": "uint256",
+					"name": "amount0",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "amount1",
+					"type": "uint256"
+				}
+			],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "tokenId",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint128",
+					"name": "ratio",
+					"type": "uint128"
+				}
+			],
+			"name": "decreaseLiquidityInRatio",
+			"outputs": [
+				{
+					"internalType": "uint256",
+					"name": "amount0",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "amount1",
+					"type": "uint256"
+				}
+			],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "token0",
+					"type": "address"
+				},
+				{
+					"internalType": "address",
+					"name": "token1",
+					"type": "address"
+				}
+			],
+			"name": "getPoolAddress",
+			"outputs": [
+				{
+					"internalType": "address",
+					"name": "pool",
+					"type": "address"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "tokenId",
+					"type": "uint256"
+				}
+			],
+			"name": "getPoolInfo",
+			"outputs": [
+				{
+					"internalType": "address",
+					"name": "pool",
+					"type": "address"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "tokenId",
+					"type": "uint256"
+				}
+			],
+			"name": "getPositionInfo",
+			"outputs": [
+				{
+					"internalType": "int24",
+					"name": "tickLower",
+					"type": "int24"
+				},
+				{
+					"internalType": "int24",
+					"name": "tickUpper",
+					"type": "int24"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "tokenId",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "amountAdd0",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "amountAdd1",
+					"type": "uint256"
+				}
+			],
+			"name": "increaseLiquidityCurrentRange",
+			"outputs": [
+				{
+					"internalType": "uint128",
+					"name": "liquidity",
+					"type": "uint128"
+				},
+				{
+					"internalType": "uint256",
+					"name": "amount0",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "amount1",
+					"type": "uint256"
+				}
+			],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "provider",
+					"type": "address"
+				},
+				{
+					"components": [
+						{
+							"internalType": "address",
+							"name": "token0",
+							"type": "address"
+						},
+						{
+							"internalType": "address",
+							"name": "token1",
+							"type": "address"
+						},
+						{
+							"internalType": "uint24",
+							"name": "fee",
+							"type": "uint24"
+						},
+						{
+							"internalType": "int24",
+							"name": "tickLower",
+							"type": "int24"
+						},
+						{
+							"internalType": "int24",
+							"name": "tickUpper",
+							"type": "int24"
+						},
+						{
+							"internalType": "uint256",
+							"name": "amount0Desired",
+							"type": "uint256"
+						},
+						{
+							"internalType": "uint256",
+							"name": "amount1Desired",
+							"type": "uint256"
+						},
+						{
+							"internalType": "uint256",
+							"name": "amount0Min",
+							"type": "uint256"
+						},
+						{
+							"internalType": "uint256",
+							"name": "amount1Min",
+							"type": "uint256"
+						},
+						{
+							"internalType": "address",
+							"name": "recipient",
+							"type": "address"
+						},
+						{
+							"internalType": "uint256",
+							"name": "deadline",
+							"type": "uint256"
+						}
+					],
+					"internalType": "struct ICustodyPositionManager.MintParams",
+					"name": "params",
+					"type": "tuple"
+				}
+			],
+			"name": "mintNewPosition",
+			"outputs": [
+				{
+					"internalType": "uint256",
+					"name": "tokenId",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint128",
+					"name": "liquidity",
+					"type": "uint128"
+				},
+				{
+					"internalType": "uint256",
+					"name": "amount0",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "amount1",
+					"type": "uint256"
+				}
+			],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		}
+	]
+}
