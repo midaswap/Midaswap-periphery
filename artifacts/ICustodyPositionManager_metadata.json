@@ -1,6 +1,6 @@
 {
 	"compiler": {
-		"version": "0.8.17+commit.8df45f5f"
+		"version": "0.8.7+commit.e28d00a7"
 	},
 	"language": "Solidity",
 	"output": {
@@ -322,6 +322,40 @@
 				],
 				"stateMutability": "nonpayable",
 				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "tokenId",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "nftAmount",
+						"type": "uint256"
+					}
+				],
+				"name": "updateLiquidity",
+				"outputs": [
+					{
+						"internalType": "uint128",
+						"name": "liquidity",
+						"type": "uint128"
+					},
+					{
+						"internalType": "uint256",
+						"name": "amount0",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "amount1",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "nonpayable",
+				"type": "function"
 			}
 		],
 		"devdoc": {
@@ -337,7 +371,7 @@
 	},
 	"settings": {
 		"compilationTarget": {
-			"MidaswapRouter.sol": "ICustodyPositionManager"
+			"MidaswapRouterWithRoyalties.sol": "ICustodyPositionManager"
 		},
 		"evmVersion": "london",
 		"libraries": {},
@@ -416,19 +450,19 @@
 			]
 		},
 		"MidasVault.sol": {
-			"keccak256": "0x30238bcee5368b7a681abfe0bbb04dd95fe409f57d0d864e19062b04f75573fd",
+			"keccak256": "0xa7b25f1f6884f2610543bca865aa323910a5f57c976b100a0d6708d53a910b62",
 			"license": "UNLICENSED",
 			"urls": [
-				"bzz-raw://223ed31dce20295ca7ba97d8a554368f231168a82b347c61d194f1fd4b3065d4",
-				"dweb:/ipfs/QmVFNeXmqTVr9yLsPv3bAPbkNvLDbxU93Dw82cuymoEvq3"
+				"bzz-raw://1d90abb73fc2ba39144d85bc9744ec15aced501ed1dcce4e7e177be8440030ea",
+				"dweb:/ipfs/QmdEiv52jGPtMwEjaCc4MNo3MWzWpNukRkDPSAaf7LRRNm"
 			]
 		},
-		"MidaswapRouter.sol": {
-			"keccak256": "0xefb8c29b13df1b89646512e07d271e7742ad9f0ce95bc3cfd0fac16993a20f3b",
+		"MidaswapRouterWithRoyalties.sol": {
+			"keccak256": "0xa06ae8a038f25acaeb338a296c8869ffafec8f5a6f16998a3d0bfce8c3bbe418",
 			"license": "UNLICENSED",
 			"urls": [
-				"bzz-raw://b133893b87f480ef8ce02b05d2dcd324d05f53398ab93e438659f701894ee47f",
-				"dweb:/ipfs/QmbmiaENcdRH1byXgjfzerA2mzxFqrj6JvzTHQAXHzZLmw"
+				"bzz-raw://d1d024d3eb179693644b992754d0617f3f0e1911037da74c5dad64719ddf176b",
+				"dweb:/ipfs/Qmbz9rHWdALUqrxRQEmY3dXQAFue6ucN3y9dvzVU3giwiT"
 			]
 		},
 		"VToken.sol": {
@@ -439,6 +473,14 @@
 				"dweb:/ipfs/QmQsTSsTm2hBCxfTDehNLxJx6jgFB1fCgs1o44evFaK61s"
 			]
 		},
+		"interfaces/IRoyaltyEngineV1.sol": {
+			"keccak256": "0x088b901b9fe87d03d237b5a0a84ba35c18933dafb9fc344bd4d17a8085ea0387",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://fa396e7cb04483aaffc2d50038d01a71816e5a3bc72021c5780e56a6437a1bcf",
+				"dweb:/ipfs/QmUEawXCXimTSihzT2UBVvwVjmCa1ykFuwwQg9p6CapDzM"
+			]
+		},
 		"interfaces/ISwapRouter.sol": {
 			"keccak256": "0x99eab284dbc18eb958f0a2d545dd1bc29fa1b1c551df17bc63e44cc3417c0e5a",
 			"license": "GPL-2.0-or-later",
@@ -447,12 +489,20 @@
 				"dweb:/ipfs/Qme21R4r2ss82Amuogc1c5KjnBSrmPn9SgLkmRc5X3UsRD"
 			]
 		},
-		"libraries/TransferHelper.sol": {
-			"keccak256": "0x434d53d4738b949f9b687ff424fe4aaa0ca060e0f1c4d1779f61b2761aafeeae",
+		"libraries/TickMath.sol": {
+			"keccak256": "0xa98594ec631f1a56e8e68e4e5958884d96fa38bdf750da2d48093d8e3ed95c5b",
 			"license": "GPL-2.0-or-later",
 			"urls": [
-				"bzz-raw://9dacbe08b5a1c63649ae68195ba77bda6ba1336d058c5ee83c8e677cc873a994",
-				"dweb:/ipfs/QmQUUGv31f2hPu7E61Pkg7DEnfBr6PivccvHJbp2EpxMP3"
+				"bzz-raw://71cd8737b935e3fb1cd7f857603b86ceae08bff79771dd401c4633860a950dd0",
+				"dweb:/ipfs/Qmb2HjTQqzkhCy6UjdPwUxCcwyEb4Ru3Vjhih2AMVKroDt"
+			]
+		},
+		"libraries/TransferHelper.sol": {
+			"keccak256": "0xf000e3ca039460d65f6a93b95b29fd6e7a7ae70759ae4c2f8d5215317904950b",
+			"license": "GPL-2.0-or-later",
+			"urls": [
+				"bzz-raw://79243626d84905c1acc5dd9cddb9533bbcb1af0d1fffdf1cbe1edde476152dad",
+				"dweb:/ipfs/QmQJY3byLgbuEjtuE1Mq461oDR1VKRFwkYM5SWsQtLwYfd"
 			]
 		}
 	},
