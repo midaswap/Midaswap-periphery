@@ -194,7 +194,7 @@ contract MidasVault is IERC721Receiver {
     function checkTickPriceOutside(
         address poolAddress,
         uint256[] calldata tokenId
-        ) external returns (bool) {
+        ) external view returns (bool) {
             // Get current tick price
             int24 currentTick = IPostionManager(custodyPositionManager).getCurrentTick(poolAddress);
             for (uint i = 0; i < tokenId.length; i++) {
@@ -209,7 +209,7 @@ contract MidasVault is IERC721Receiver {
         address poolAddress,
         uint256[] calldata tokenId,
         int24 currentTick
-        ) internal returns (bool) {
+        ) internal view returns (bool) {
             for (uint i = 0; i < tokenId.length; i++) {
                 require(deposits[poolAddress][tokenId[i]].tickLower <= currentTick && deposits[poolAddress][tokenId[i]].tickUpper >= currentTick);
             }
@@ -220,9 +220,9 @@ contract MidasVault is IERC721Receiver {
         address poolAddress,
         uint256[] calldata tokenId,
         address receiver
-        ) internal returns (bool) {
+        ) internal view returns (bool) {
             for (uint i = 0; i < tokenId.length; i++) {
-                require(msg.sender == deposits[poolAddress][tokenId[i]].owner);
+                require(receiver == deposits[poolAddress][tokenId[i]].owner);
             }
             return true;        
         }
