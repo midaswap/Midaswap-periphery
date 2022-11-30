@@ -7,13 +7,10 @@ import 'https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1/contr
 import 'https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.4.1/contracts/access/Ownable.sol';
 import 'https://github.com/Uniswap/v3-core/contracts/libraries/TickMath.sol';
 import 'https://github.com/Uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol';
-import './libraries/TransferHelper.sol';
+import './libraries/TransferHelperOldComplier.sol';
 import './interfaces/INonfungiblePositionManager.sol';
 
 contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
-
-    int24 private constant MIN_TICK = -24850;
-    int24 private constant MAX_TICK = -20800;
 
     event PoolCreated(address pool);
     event NewPositionMinted(uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
@@ -33,7 +30,6 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
 
     /// @dev deposits[tokenId] => Deposit
     mapping(uint256 => Deposit) public deposits;
-
     /// @dev pools[token0Address] => (token1Address => poolAddress)
     mapping(address => mapping(address => address)) public pools;
     /// @dev positionPools[tokenId] => poolAddress
@@ -137,7 +133,7 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
         uint256 amountAdd0,
         uint256 amountAdd1
     )
-        external
+        public
         returns (
             uint128 liquidity,
             uint256 amount0,
@@ -186,44 +182,6 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
         _sendToOwner(tokenId, amount0, amount1);
     }
 
-    /// @notice A function that decreases the current liquidity by a specific ratio.
-    /// @param tokenId The id of the erc721 token
-    /// @return amount0 The amount received back in token0
-    /// @return amount1 The amount returned back in token1
-    function decreaseLiquidityInRatio(
-        uint256 tokenId, 
-        uint128 ratio
-    ) 
-        external 
-        returns (
-            uint256 amount0, 
-            uint256 amount1
-        ) 
-    {
-        // caller must be the owner of the NFT
-        require(msg.sender == deposits[tokenId].owner, 'Not the owner');
-        // get liquidity data for tokenId
-        uint128 liquidity = deposits[tokenId].liquidity;
-        require(ratio < 1, "Cannot decrease liquidity more than you have!");
-        uint128 subLiquidity = liquidity * ratio;
-
-        // amount0Min and amount1Min are price slippage checks
-        // if the amount received after burning is not greater than these minimums, transaction will fail
-        INonfungiblePositionManager.DecreaseLiquidityParams memory params =
-            INonfungiblePositionManager.DecreaseLiquidityParams({
-                tokenId: tokenId,
-                liquidity: subLiquidity,
-                amount0Min: 0,
-                amount1Min: 0,
-                deadline: block.timestamp
-            });
-
-        (amount0, amount1) = nonfungiblePositionManager.decreaseLiquidity(params);
-
-        //send liquidity back to owner
-        _sendToOwner(tokenId, amount0, amount1);
-    }
-
     function decreaseLiquidity(
         uint256 tokenId, 
         uint128 subLiquidity
@@ -253,38 +211,42 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
             });
         remainLiquidity = liquidity - subLiquidity;
         (amount0, amount1) = nonfungiblePositionManager.decreaseLiquidity(params);
-
         //send liquidity back to owner
         _sendToOwner(tokenId, amount0, amount1);
     }
-    
-    /// @dev            A function that withdraws the liquidity to LPs regarding the NFT which is traded outside of current tick price
-    /// @notice         Here will not transfer the assets back to LP, as they have gotten the assets directly.
-    ///                 Custody contract will keep this part of liquidity.
-    /// @param tokenId  The id of the erc721 token
-    /// @return amount0 The amount received back in token0
-    /// @return amount1 The amount returned back in token1
-    function decreaseSpecificLiquidity(uint256 tokenId, uint128 subLiquidity) 
-        onlyOwner 
+
+    address public MidaswapRouter;
+
+    function setMidaswapRouter(address router) external onlyOwner returns (bool) {
+        MidaswapRouter = router;
+        return true;
+    }
+
+    // This function is meant to solve the scenario of trade outside of current tick price.
+    function updateLiquidity(uint256 tokenId, uint256 nftAmount)  
         external
         returns (
+            uint128 newLiquidity,
             uint256 amount0, 
             uint256 amount1
         ) 
     {
-        require(subLiquidity < deposits[tokenId].liquidity, "Over withdrawal!");
-        // amount0Min and amount1Min are price slippage checks
-        // if the amount received after burning is not greater than these minimums, transaction will fail
+        // caller must be the router
+        require(msg.sender == MidaswapRouter, 'Not the MidaswapRouter!');
+        // get liquidity data for tokenId
+        uint128 liquidity = deposits[tokenId].liquidity;
+
         INonfungiblePositionManager.DecreaseLiquidityParams memory params =
             INonfungiblePositionManager.DecreaseLiquidityParams({
                 tokenId: tokenId,
-                liquidity: subLiquidity,
+                liquidity: liquidity,
                 amount0Min: 0,
                 amount1Min: 0,
                 deadline: block.timestamp
             });
 
         (amount0, amount1) = nonfungiblePositionManager.decreaseLiquidity(params);
+        (newLiquidity, amount0, amount1) = increaseLiquidityCurrentRange(tokenId, amount0 - nftAmount, amount1);
     }
 
     /// @notice Transfers funds to owner of NFT
@@ -306,16 +268,16 @@ contract CustodyPositionManager is Ownable, ERC721, IERC721Receiver {
         TransferHelper.safeTransfer(token1, owner, amount1);
     }
 
-    /// @notice Transfers the NFT to the owner
-    /// @param tokenId The id of the erc721
-    function retrieveNFT(uint256 tokenId) external {
-        // must be the owner of the NFT
-        require(msg.sender == deposits[tokenId].owner, 'Not the owner');
-        // remove information related to tokenId
-        delete deposits[tokenId];
-        // transfer ownership to original owner
-        nonfungiblePositionManager.safeTransferFrom(address(this), msg.sender, tokenId);
-    }
+    // /// @notice Transfers the NFT to the owner
+    // /// @param tokenId The id of the erc721
+    // function retrieveNFT(uint256 tokenId) external {
+    //     // must be the owner of the NFT
+    //     require(msg.sender == deposits[tokenId].owner, 'Not the owner');
+    //     // remove information related to tokenId
+    //     delete deposits[tokenId];
+    //     // transfer ownership to original owner
+    //     nonfungiblePositionManager.safeTransferFrom(address(this), msg.sender, tokenId);
+    // }
 
     function burn(uint256 tokenId) external returns (bool) {
         // must be the owner of the NFT        

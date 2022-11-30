@@ -4,6 +4,7 @@ pragma abicoder v2;
 
 import './MidasVault.sol';
 import './libraries/TransferHelper.sol';
+import './libraries/TickMath.sol';
 import './interfaces/ISwapRouter.sol';
 
 interface ICustodyPositionManager {
@@ -74,8 +75,16 @@ interface ICustodyPositionManager {
             uint256 amount1
         );
 
+    function updateLiquidity(uint256 tokenId, uint256 nftAmount)  
+        external
+        returns (
+            uint128 liquidity,
+            uint256 amount0, 
+            uint256 amount1
+        );
+
     function burn(uint256 tokenId) external returns (bool);
-    
+
 }
 
 contract MidaswapRouter {
@@ -104,6 +113,34 @@ contract MidaswapRouter {
         amountIn = _swapExactOutputSingle(amountOut, amountInMaximum, ftAddress, token0, poolFee);
         address poolAddress = ICustodyPositionManager(custodyPositionManager).getPoolAddress(token0, ftAddress); 
         midasVault.withdrawERC721FromTrader(nftAddress, poolAddress, tokenId, msg.sender);
+    }
+
+    // This function is meant to trade NFTs outside the current tick
+    function buyERC721Conduit(
+        uint256[] calldata tokenId,
+        uint256 amountInMaxium,
+        address nftAddress,
+        address ftAddress
+    ) external returns (uint256 amountIn) {
+        // Check if these tokenIds outside of current tick
+        address poolAddress = ICustodyPositionManager(custodyPositionManager).getPoolAddress(nftAddress, ftAddress); 
+        require(midasVault.checkTickPriceOutside(poolAddress, tokenId), 'Cannot be traded through this conduit!');
+
+        // Transfer the specific amount of ft token to this address
+        TransferHelper.safeTransferFrom(ftAddress, msg.sender, address(this), amountInMaxium);
+        TransferHelper.safeApprove(ftAddress, address(this), amountInMaxium);
+
+        // Initial the amountIn
+        amountIn = 0;
+        // Help LPs decrease the liquidity   
+        for (uint i = 0; i < tokenId.length; i++){
+            uint256 lpTokenId = nftPositionMap[poolAddress][tokenId[i]];
+            address owner = midasVault.getOwner(tokenId[i], poolAddress);
+            uint256 value = _getPrice(lpTokenId);
+            TransferHelper.safeTransferFrom(ftAddress, address(this), owner, value / 1e18);
+            amountIn += value;
+            ICustodyPositionManager(custodyPositionManager).updateLiquidity(lpTokenId, 1e18);
+        }
     }
 
     function buyERC1155(
@@ -220,6 +257,13 @@ contract MidaswapRouter {
         amountOut = swapRouter.exactInputSingle(params);
     }
 
+    function _getPrice(uint256 lpTokenId) internal view returns (uint256 value) {
+        (int24 tickLower, int24 tickUpper) = ICustodyPositionManager(custodyPositionManager).getPositionInfo(lpTokenId);
+        uint256 sqrtRatioX96A = TickMath.getSqrtRatioAtTick(tickLower);
+        uint256 sqrtRatioX96B = TickMath.getSqrtRatioAtTick(tickUpper);
+        value = (TickMath.getPrice(sqrtRatioX96A) + TickMath.getPrice(sqrtRatioX96B)) / 2;
+    }
+
     /* ========== LIQUIDITY MANAGEMENT ========== */
     
     function createAndInitializePoolIfNecessary(
@@ -242,7 +286,9 @@ contract MidaswapRouter {
                         poolFee, 
                         sqrtPriceX96);
     }
-        
+
+    mapping(address => mapping(uint256 => uint256)) nftPositionMap; 
+
     function mintFromNFTs(
         address nftAddress, 
         address ftAddress,
@@ -266,7 +312,10 @@ contract MidaswapRouter {
             midasVault.exchangeERC721FromLP(msg.sender, nftAddress, tokenId, poolAddress, params.tickLower, params.tickUpper);
             params.token0 = midasVault.getVtokenAddress721(nftAddress);
             params.token1 = ftAddress;
-            (lpTokenId, liquidity, amount0, amount1) = ICustodyPositionManager(custodyPositionManager).mintNewPosition(msg.sender, params);          
+            (lpTokenId, liquidity, amount0, amount1) = ICustodyPositionManager(custodyPositionManager).mintNewPosition(msg.sender, params); 
+            for(uint i = 0; i < tokenId.length; i++){
+                nftPositionMap[poolAddress][tokenId[i]] = lpTokenId;
+            }
         }
     }
 
@@ -306,7 +355,10 @@ contract MidaswapRouter {
             (int24 tickLower, int24 tickUpper) = ICustodyPositionManager(custodyPositionManager).getPositionInfo(lpTokenId);
             address poolAddress = ICustodyPositionManager(custodyPositionManager).getPoolInfo(lpTokenId);           
             midasVault.exchangeERC721FromLP(msg.sender, nftAddress, tokenId, poolAddress, tickLower, tickUpper);
-            (liquidity, amount0, amount1) = ICustodyPositionManager(custodyPositionManager).increaseLiquidityCurrentRange(lpTokenId, amountAdd0, amountAdd1);          
+            (liquidity, amount0, amount1) = ICustodyPositionManager(custodyPositionManager).increaseLiquidityCurrentRange(lpTokenId, amountAdd0, amountAdd1);
+            for(uint i = 0; i < tokenId.length; i++){
+                nftPositionMap[poolAddress][tokenId[i]] = lpTokenId;
+            }          
         }
     }
 
@@ -341,6 +393,9 @@ contract MidaswapRouter {
             require(tokenId.length < amount0, 'Over the assets you own!');
             address poolAddress = ICustodyPositionManager(custodyPositionManager).getPoolInfo(lpTokenId);
             midasVault.withdrawERC721FromLP(nftAddress, poolAddress, tokenId, msg.sender);
+            for(uint i = 0; i < tokenId.length; i++){
+                delete nftPositionMap[poolAddress][tokenId[i]];
+            }
         }
     }
 
