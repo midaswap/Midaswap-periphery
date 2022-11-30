@@ -130,8 +130,6 @@ contract MidaswapRouter {
         TransferHelper.safeTransferFrom(ftAddress, msg.sender, address(this), amountInMaxium);
         TransferHelper.safeApprove(ftAddress, address(this), amountInMaxium);
 
-        // Get the info of pool
-        address token0 = midasVault.getVtokenAddress721(nftAddress);
         // Initial the amountIn
         amountIn = 0;
         // Help LPs decrease the liquidity   
@@ -259,7 +257,7 @@ contract MidaswapRouter {
         amountOut = swapRouter.exactInputSingle(params);
     }
 
-    function _getPrice(uint256 lpTokenId) internal returns (uint256 value) {
+    function _getPrice(uint256 lpTokenId) internal view returns (uint256 value) {
         (int24 tickLower, int24 tickUpper) = ICustodyPositionManager(custodyPositionManager).getPositionInfo(lpTokenId);
         uint256 sqrtRatioX96A = TickMath.getSqrtRatioAtTick(tickLower);
         uint256 sqrtRatioX96B = TickMath.getSqrtRatioAtTick(tickUpper);
