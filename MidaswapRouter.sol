@@ -112,7 +112,7 @@ contract MidaswapRouter {
         uint256 amountOut = tokenId.length;
         amountIn = _swapExactOutputSingle(amountOut, amountInMaximum, ftAddress, token0, poolFee);
         address poolAddress = ICustodyPositionManager(custodyPositionManager).getPoolAddress(token0, ftAddress); 
-        midasVault.withdrawERC721FromTrader(nftAddress, poolAddress, tokenId, msg.sender);
+        midasVault.withdrawFromFTtoERC721(nftAddress, poolAddress, tokenId, msg.sender);
     }
 
     // This function is meant to trade NFTs outside the current tick
@@ -132,15 +132,18 @@ contract MidaswapRouter {
 
         // Initial the amountIn
         amountIn = 0;
-        // Help LPs decrease the liquidity   
+        // Help LPs decrease the liquidity and transfer ft to LP  
         for (uint i = 0; i < tokenId.length; i++){
             uint256 lpTokenId = nftPositionMap[poolAddress][tokenId[i]];
             address owner = midasVault.getOwner(tokenId[i], poolAddress);
             uint256 value = _getPrice(lpTokenId);
             TransferHelper.safeTransferFrom(ftAddress, address(this), owner, value / 1e18);
             amountIn += value;
+            // Update the liquidity position of LP
             ICustodyPositionManager(custodyPositionManager).updateLiquidity(lpTokenId, 1e18);
         }
+        // Transfer NFTs to trader
+        midasVault.withdrawFromFTtoERC721Conduit(nftAddress, poolAddress, tokenId, msg.sender);
     }
 
     function buyERC1155(
