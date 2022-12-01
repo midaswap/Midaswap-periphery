@@ -112,7 +112,7 @@ contract MidaswapRouterWithRoyalties {
     ) external returns (uint256 amountIn) {
         address token1 = midasVault.getVtokenAddress721(nftAddress);
         uint256 amountOut = tokenId.length;
-        amountIn = _swapExactOutputSingle(amountOut, amountInMaximum, ftAddress, token1, poolFee);
+        amountIn = _swapExactOutputERC721Single(amountOut, amountInMaximum, tokenId[0], nftAddress, ftAddress, token1, poolFee);
         address poolAddress = ICustodyPositionManager(custodyPositionManager).getPoolAddress(token1, ftAddress); 
         midasVault.withdrawERC721FromTrader(nftAddress, poolAddress, tokenId, msg.sender);
     }
@@ -179,6 +179,7 @@ contract MidaswapRouterWithRoyalties {
         address poolAddress = ICustodyPositionManager(custodyPositionManager).getPoolAddress(midasVault.getVtokenAddress721(nftAddress), ftAddress);
         midasVault.exchangeERC721FromTrader(msg.sender, nftAddress, poolAddress, tokenId);
         amountOut = _swapExactInputSingle(amountIn, midasVault.getVtokenAddress721(nftAddress), ftAddress, poolFee);
+        _sendRoyalties(nftAddress, ftAddress, tokenId[0], amountOut, msg.sender);
     }
 
     function sellERC1155(
@@ -214,6 +215,46 @@ contract MidaswapRouterWithRoyalties {
                 TransferHelper.safeTransferFrom(ftAddress, address(this), recipients[i], amounts[i] * (1 - feeRate / 1e18));
             }
         }
+
+    function _swapExactOutputERC721Single(
+        uint256 amountOut, 
+        uint256 amountInMaximum,
+        uint256 tokenId,
+        address nftAddress,
+        address token0,
+        address token1,
+        uint24 poolFee
+        ) internal returns (uint256 amountIn) {
+        // Transfer the specified amount of token0 to this contract.
+        TransferHelper.safeTransferFrom(token0, msg.sender, address(this), amountInMaximum);
+
+        // Approve the router to spend the specified `amountInMaximum` of token0.
+        // In production, you should choose the maximum amount to spend based on oracles or other data sources to achieve a better swap.
+        TransferHelper.safeApprove(token0, address(swapRouter), amountInMaximum);
+
+        ISwapRouter.ExactOutputSingleParams memory params =
+            ISwapRouter.ExactOutputSingleParams({
+                tokenIn: token0,
+                tokenOut: token1,
+                fee: poolFee,
+                recipient: msg.sender,
+                deadline: block.timestamp,
+                amountOut: amountOut,
+                amountInMaximum: amountInMaximum,
+                sqrtPriceLimitX96: 0
+            });
+
+        // Executes the swap returning the amountIn needed to spend to receive the desired amountOut.
+        amountIn = swapRouter.exactOutputSingle(params);
+        uint256 totalRoyalties = _sendRoyalties(nftAddress, token0, tokenId, amountIn, msg.sender);
+
+        // For exact output swaps, the amountInMaximum may not have all been spent.
+        // If the actual amount spent (amountIn) is less than the specified maximum amount, we must refund the msg.sender and approve the swapRouter to spend 0.
+        if (amountIn + totalRoyalties < amountInMaximum) {
+            TransferHelper.safeApprove(token0, address(swapRouter), 0);
+            TransferHelper.safeTransfer(token0, msg.sender, amountInMaximum - amountIn - totalRoyalties);
+        }
+    }    
 
     function _swapExactOutputSingle(
         uint256 amountOut, 
