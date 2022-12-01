@@ -4,6 +4,7 @@ pragma abicoder v2;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import '@openzeppelin/contracts/access/Ownable.sol';
 import './VToken.sol';
 
 /**
@@ -26,7 +27,7 @@ interface IPostionManager {
     function getCurrentTick(address poolAddress) external view returns (int24 tick);
 }
 
-contract MidasVault is IERC721Receiver {
+contract MidasVault is Ownable, IERC721Receiver {
 
 
     // @dev MIN_TICK & MAX_TICK refer to all the range, 
@@ -35,6 +36,7 @@ contract MidasVault is IERC721Receiver {
     int24 private constant MAX_TICK = -MIN_TICK;
     
     address private custodyPositionManager;
+    address private midaswapRouter;
         
     constructor (address _custodyPositionManager) public {
         custodyPositionManager = _custodyPositionManager;
@@ -60,6 +62,12 @@ contract MidasVault is IERC721Receiver {
         return IERC721Receiver.onERC721Received.selector;
     }
 
+    function setRouter(
+        address _midasRouter
+    ) external onlyOwner returns (bool) {
+        midaswapRouter = _midasRouter;
+        return true;
+    }
 
     /* ========== VIEW FUNCTIONS ========== */
 
@@ -78,6 +86,12 @@ contract MidasVault is IERC721Receiver {
     /**
 
     /* ========== EXTERNAL FUNCTIONS ========== */
+
+    modifier onlyRouter {
+        require(msg.sender == midaswapRouter);
+        _;
+    }
+
     function create(
         address nftAddress, 
         uint id
@@ -121,7 +135,7 @@ contract MidasVault is IERC721Receiver {
             VTOKEN(nftVTokenMap721[nftAddress]).mint(owner, nftAmount);
         }
     
-    function withdrawERC721FromTrader(
+    function withdrawFromFractionsToERC721(
         address nftAddress,
         address poolAddress,
         uint256[] calldata tokenId,
@@ -131,11 +145,41 @@ contract MidasVault is IERC721Receiver {
             // Get current tick price
             int24 currentTick = IPostionManager(custodyPositionManager).getCurrentTick(poolAddress);
             // Check if the tokenId is valid to withdraw
-            _checkTickPrice(poolAddress, tokenId, currentTick);
+            require(_checkTickPrice(poolAddress, tokenId, currentTick), 'Not available for withdraw!');
+            require(_checkOwnership(poolAddress, tokenId, receiver), 'Not available for withdraw!');
             // Check if the withdrawal successful
             VTOKEN(nftVTokenMap721[nftAddress]).burn(receiver, nftAmount);
             require(_withdrawNFTs(nftAddress, poolAddress, tokenId, receiver), "Withdraw assets failed!");
         }
+    
+    function withdrawFromFTtoERC721(
+        address nftAddress,
+        address poolAddress,
+        uint256[] calldata tokenId,
+        address receiver
+        ) external onlyRouter returns (uint256 nftAmount) {
+            nftAmount = tokenId.length;
+            // Get current tick price
+            int24 currentTick = IPostionManager(custodyPositionManager).getCurrentTick(poolAddress);
+            // Check if the tokenId is valid to withdraw
+            require(_checkTickPrice(poolAddress, tokenId, currentTick), 'Not available for withdraw!');
+            VTOKEN(nftVTokenMap721[nftAddress]).burn(receiver, nftAmount);
+            require(_withdrawNFTs(nftAddress, poolAddress, tokenId, receiver), "Withdraw assets failed!");
+        }    
+
+    function withdrawFromFTtoERC721Conduit(
+        address nftAddress,
+        address poolAddress,
+        uint256[] calldata tokenId,
+        address receiver
+        ) external onlyRouter returns (uint256 nftAmount) {
+            nftAmount = tokenId.length;
+            // Get current tick price
+            int24 currentTick = IPostionManager(custodyPositionManager).getCurrentTick(poolAddress);
+            // Check if the tokenId is valid to withdraw
+            require(_checkTickPrice(poolAddress, tokenId, currentTick), 'Not available for withdraw!');
+            require(_withdrawNFTs(nftAddress, poolAddress, tokenId, receiver), "Withdraw assets failed!");
+        }   
     
     function withdrawERC721FromLP(
         address nftAddress, 
@@ -222,7 +266,7 @@ contract MidasVault is IERC721Receiver {
         address receiver
         ) internal view returns (bool) {
             for (uint i = 0; i < tokenId.length; i++) {
-                require(receiver == deposits[poolAddress][tokenId[i]].owner);
+                require(receiver == deposits[poolAddress][tokenId[i]].owner || address(this) == deposits[poolAddress][tokenId[i]].owner);
             }
             return true;        
         }
