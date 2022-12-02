@@ -114,7 +114,7 @@ contract MidaswapRouterWithRoyalties {
         uint256 amountOut = tokenId.length;
         amountIn = _swapExactOutputERC721Single(amountOut, amountInMaximum, tokenId[0], nftAddress, ftAddress, token1, poolFee);
         address poolAddress = ICustodyPositionManager(custodyPositionManager).getPoolAddress(token1, ftAddress); 
-        midasVault.withdrawERC721FromTrader(nftAddress, poolAddress, tokenId, msg.sender);
+        midasVault.withdrawFromFTtoERC721(nftAddress, poolAddress, tokenId, msg.sender);
     }
 
     // This function is meant to trade NFTs outside the current tick
@@ -145,6 +145,8 @@ contract MidaswapRouterWithRoyalties {
         }
 
         uint256 totalRoyalties = _sendRoyalties(nftAddress, ftAddress, tokenId[0], amountIn, msg.sender);
+        // Transfer NFTs to trader
+        midasVault.withdrawFromFTtoERC721Conduit(nftAddress, poolAddress, tokenId, msg.sender);
 
         if (amountIn + totalRoyalties < amountInMaximum) {
             TransferHelper.safeApprove(ftAddress, address(swapRouter), 0);
