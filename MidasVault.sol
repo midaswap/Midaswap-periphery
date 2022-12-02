@@ -174,10 +174,6 @@ contract MidasVault is Ownable, IERC721Receiver {
         address receiver
         ) external onlyRouter returns (uint256 nftAmount) {
             nftAmount = tokenId.length;
-            // Get current tick price
-            int24 currentTick = IPostionManager(custodyPositionManager).getCurrentTick(poolAddress);
-            // Check if the tokenId is valid to withdraw
-            require(_checkTickPrice(poolAddress, tokenId, currentTick), 'Not available for withdraw!');
             require(_withdrawNFTs(nftAddress, poolAddress, tokenId, receiver), "Withdraw assets failed!");
         }   
     
